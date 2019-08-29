@@ -125,8 +125,10 @@ class SpiWishboneBridge(Module):
             self.wishbone.we.eq(1),
             self.wishbone.cyc.eq(1),
             If(self.wishbone.ack | self.wishbone.err,
-                NextState("END"),
-                NextValue(miso, 0),
+                NextState("WAIT_BYTE_BOUNDARY"),
+            ),
+            If(clk_rising,
+                NextValue(counter, counter + 1),
             ),
         )
 
@@ -145,7 +147,11 @@ class SpiWishboneBridge(Module):
 
         fsm.act("WAIT_BYTE_BOUNDARY",
             If(counter[0:3] == 0,
-                NextState("WRITE_RESPONSE"),
+                If(wr,
+                    NextState("END"),
+                ).Else(
+                    NextState("WRITE_RESPONSE"),
+                ),
                 NextValue(miso, 0),
                 NextValue(counter, 0),
             ),
