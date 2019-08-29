@@ -32,3 +32,5 @@ sim/csr.csv
 sim/dump.vcd
 sim/dut.v
 sim/sim_build
+sim/results.xml
+sim/mem.init

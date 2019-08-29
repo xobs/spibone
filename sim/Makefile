@@ -43,7 +43,7 @@ endif
 
 VERILOG_SOURCES = $(WPWD)/dut.v $(WPWD)/tb.v
 TOPLEVEL = tb
-MODULE = test-spi
+MODULE = test-spibone
 
 CUSTOM_COMPILE_DEPS = $(PWD)/dut.v
 
@@ -54,3 +54,4 @@ $(PWD)/dut.v: generate-verilog.py ../spibone.py
 	cd ..
 	PYTHONPATH=../deps/litex:../deps/migen:../deps/litedram:.. python3 generate-verilog.py
 	mv build/gateware/dut.v .
+	mv build/gateware/mem.init .

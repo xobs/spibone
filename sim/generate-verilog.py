@@ -119,7 +119,7 @@ class BaseSoC(SoCCore):
             cpu_type=None,
             integrated_rom_size=0x0,
             integrated_sram_size=0x0,
-            integrated_main_ram_size=0x0,
+            integrated_main_ram_size=4096,
             csr_address_width=14, csr_data_width=8,
             with_uart=False, with_timer=False)
 
