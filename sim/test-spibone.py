@@ -9,12 +9,14 @@ from wishbone import WishboneMaster, WBOp
 import logging
 import csv
 import inspect
+import os
 
 # Disable pylint's E1101, which breaks on our wishbone addresses
 #pylint:disable=E1101
 
 class SpiboneTest:
     def __init__(self, dut, test_name):
+        self.twi = "THREEWIRE" in os.environ
         self.dut = dut
         self.csrs = dict()
         with open("csr.csv", newline='') as csr_csv_file:
@@ -70,7 +72,10 @@ class SpiboneTest:
     def host_spi_read_byte(self):
         val = 0
         for shift in range(7, -1, -1):
-            val = val | (int(self.dut.spi_miso) << shift)
+            if self.twi:
+                val = val | (int(self.dut.spi_mosi) << shift)
+            else:
+                val = val | (int(self.dut.spi_miso) << shift)
             yield self.host_spi_tick()
         raise ReturnValue(val)
 
@@ -96,8 +101,12 @@ class SpiboneTest:
         timeout_counter = 0
         while True:
             yield self.host_spi_tick()
-            if self.dut.spi_miso == 0 and (timeout_counter % 8) == 0:
-                break
+            if self.twi:
+                if self.dut.spi_mosi == 0 and (timeout_counter % 8) == 0:
+                    break
+            else:
+                if self.dut.spi_miso == 0 and (timeout_counter % 8) == 0:
+                    break
             timeout_counter = timeout_counter + 1
             if timeout_counter > 200:
                 raise TestFailure("timed out waiting for response")
@@ -125,8 +134,12 @@ class SpiboneTest:
         timeout_counter = 0
         while True:
             yield self.host_spi_tick()
-            if self.dut.spi_miso == 0 and (timeout_counter % 8) == 0:
-                break
+            if self.twi:
+                if self.dut.spi_mosi == 0 and (timeout_counter % 8) == 0:
+                    break
+            else:
+                if self.dut.spi_miso == 0 and (timeout_counter % 8) == 0:
+                    break
             timeout_counter = timeout_counter + 1
             if timeout_counter > 200:
                 raise TestFailure("timed out waiting for response")
@@ -138,7 +151,10 @@ class SpiboneTest:
         # Value
         val = 0
         for shift in range(31, -1, -1):
-            val = val | (int(self.dut.spi_miso) << shift)
+            if self.twi:
+                val = val | (int(self.dut.spi_mosi) << shift)
+            else:
+                val = val | (int(self.dut.spi_miso) << shift)
             yield self.host_spi_tick()
 
         self.dut.spi_cs_n = 1

@@ -41,17 +41,27 @@ WPWD=$(shell pwd)
 PYTHONPATH := $(PWD)/..:$(PYTHONPATH)
 endif
 
-VERILOG_SOURCES = $(WPWD)/dut.v $(WPWD)/tb.v
+ifneq ($(THREEWIRE),)
+VERILOG_SOURCES = $(WPWD)/dut-threewire.v $(WPWD)/tb.v
+CUSTOM_COMPILE_DEPS = $(PWD)/dut-threewire.v
+else
+VERILOG_SOURCES = $(WPWD)/dut-fourwire.v $(WPWD)/tb.v
+CUSTOM_COMPILE_DEPS = $(PWD)/dut-fourwire.v
+endif
 TOPLEVEL = tb
 MODULE = test-spibone
 
-CUSTOM_COMPILE_DEPS = $(PWD)/dut.v
 
 include $(shell cocotb-config --makefiles)/Makefile.inc
 include $(shell cocotb-config --makefiles)/Makefile.sim
 
-$(PWD)/dut.v: generate-verilog.py ../spibone.py
+$(PWD)/dut-fourwire.v: generate-verilog.py ../spibone.py
 	cd ..
 	PYTHONPATH=../deps/litex:../deps/migen:../deps/litedram:.. python3 generate-verilog.py
-	mv build/gateware/dut.v .
+	mv build/gateware/dut.v dut-fourwire.v
 	mv build/gateware/mem.init .
+
+$(PWD)/dut-threewire.v: generate-verilog.py ../spibone.py
+	cd $(PWD)
+	PYTHONPATH=../deps/litex:../deps/migen:../deps/litedram:.. python3 generate-verilog.py --three-wire
+	mv build/gateware/dut.v dut-threewire.v

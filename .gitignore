@@ -31,6 +31,8 @@ abc.history
 sim/csr.csv
 sim/dump.vcd
 sim/dut.v
+sim/dut-threewire.v
+sim/dut-fourwire.v
 sim/sim_build
 sim/results.xml
 sim/mem.init
