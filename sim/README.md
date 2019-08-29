@@ -6,11 +6,12 @@ This directory contains everything necessary to simulate spibone.  Simulation is
 
 To simulate, you need `iverilog` and `cocotb`.  To view the output, you need `gtkwave` and, optionally, `sigrok-cli`.
 
-> | ----------- |------------------ |
-> | **[iverilog](http://iverilog.icarus.com/)** | Verilog simulator |
-> | **[cocotb](https://github.com/cocotb/cocotb/)** | Allows us to drive `iverilog` with Python |
-> | **[gtkwave](http://gtkwave.sourceforge.net/)** | Display VCD waveform files |
-> | **[sigrok-cli](https://sigrok.org/wiki/Sigrok-cli)** | Decode SPI signals in `gtkwave` |
+| Tool        | Purpose           |
+| ----------- |------------------ |
+| **[iverilog](http://iverilog.icarus.com/)** | Verilog simulator |
+| **[cocotb](https://github.com/cocotb/cocotb/)** | Allows us to drive `iverilog` with Python |
+| **[gtkwave](http://gtkwave.sourceforge.net/)** | Display VCD waveform files |
+| **[sigrok-cli](https://sigrok.org/wiki/Sigrok-cli)** | Decode SPI signals in `gtkwave` |
 
 ## Running the Simulator
 
