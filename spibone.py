@@ -157,7 +157,7 @@ class SpiWishboneBridge(Module):
         # Write the "00" byte that indicates a response
         fsm.act("WRITE_RESPONSE",
             If(counter == 7,
-                NextValue(miso, 0),
+                NextValue(miso, 1),
                 NextValue(counter, 33),
                 NextState("WRITE_VALUE")
             ),

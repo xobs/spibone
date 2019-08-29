@@ -28,3 +28,22 @@ To run `gtkwave` with the Sigrok decoder, run `gtkwave -S gtkwave.init dump.vcd`
 **To get more levels of SPI decode**, right-click on the `Signals` area and select `Insert Blank`.  Then drag the new signal so that it is below `spi_decoded`.  You may do this multiple times.
 
 The main FSM exposes its current state name as a signal called `state_name`.  You can add this signal, then right-click on it and select `Data Format` -> `ASCII`.
+
+## Protocol
+
+The protocol for the SPI bridge is big-endian.  There are two distinct operations: Read and Write.
+
+```
+Read protocol:
+    Write: 01 | AA | AA | AA | AA
+    [Wishbone Operation]
+    Read:  01 | VV | VV | VV | VV
+Write protocol:
+    Write: 00 | AA | AA | AA | AA | VV | VV | VV | VV
+    [Wishbone Operation]
+    Read:  00
+"AA" is address, "VV" is value.  All bytes are big-endian.
+During the "Wishbone Operation" phase, the host constantly outputs "FF"
+until it has a response, at which point it outputs "00" (write)
+or "01" (read).
+```

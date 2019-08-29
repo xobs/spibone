@@ -44,6 +44,7 @@ class SpiboneTest:
     @cocotb.coroutine
     def reset(self):
         self.dut.reset = 1
+        self.spi_cs_n = 1
         yield RisingEdge(self.dut.clk12)
         yield RisingEdge(self.dut.clk12)
         self.dut.reset = 0
@@ -61,9 +62,17 @@ class SpiboneTest:
 
     @cocotb.coroutine
     def host_spi_write_byte(self, val):
-        for shift in range(0, 8):
-            self.dut.spi_mosi = (val >> (7-shift)) & 1
+        for shift in range(7, -1, -1):
+            self.dut.spi_mosi = (val >> shift) & 1
             yield self.host_spi_tick()
+
+    @cocotb.coroutine
+    def host_spi_read_byte(self):
+        val = 0
+        for shift in range(7, -1, -1):
+            val = val | (int(self.dut.spi_miso) << shift)
+            yield self.host_spi_tick()
+        raise ReturnValue(val)
 
     @cocotb.coroutine
     def host_spi_write(self, addr, val):
@@ -86,12 +95,16 @@ class SpiboneTest:
         # Wait for response
         timeout_counter = 0
         while True:
-            if self.dut.spi_miso == 0:
+            if self.dut.spi_miso == 0 and (timeout_counter % 8) == 0:
                 break
             yield self.host_spi_tick()
             timeout_counter = timeout_counter + 1
             if timeout_counter > 200:
                 raise TestFailure("timed out waiting for response")
+
+        val = yield self.host_spi_read_byte()
+        if val != 0:
+            raise TestFailure("response byte was 0x{:02x}, not 0x00".format(val))
         self.dut.spi_cs_n = 1
 
     @cocotb.coroutine
@@ -111,17 +124,16 @@ class SpiboneTest:
         # Wait for response
         timeout_counter = 0
         while True:
-            if self.dut.spi_miso == 0:
-                break
             yield self.host_spi_tick()
+            if self.dut.spi_miso == 0 and (timeout_counter % 8) == 0:
+                break
             timeout_counter = timeout_counter + 1
             if timeout_counter > 200:
                 raise TestFailure("timed out waiting for response")
 
-        for i in range(0, 8):
-            if self.dut.spi_miso != 0:
-                raise TestFailure("spi_miso was not 0 during response header")
-            yield self.host_spi_tick()
+        val = yield self.host_spi_read_byte()
+        if val != 0x01:
+            raise TestFailure("response byte was 0x{:02x}, not 0x01".format(val))
 
         # Value
         val = 0
