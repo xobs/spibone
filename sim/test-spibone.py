@@ -8,12 +8,13 @@ from wishbone import WishboneMaster, WBOp
 
 import logging
 import csv
+import inspect
 
 # Disable pylint's E1101, which breaks on our wishbone addresses
 #pylint:disable=E1101
 
 class SpiboneTest:
-    def __init__(self, dut):
+    def __init__(self, dut, test_name):
         self.dut = dut
         self.csrs = dict()
         with open("csr.csv", newline='') as csr_csv_file:
@@ -27,9 +28,8 @@ class SpiboneTest:
 
         # Set the signal "test_name" to match this test, so that we can
         # tell from gtkwave which test we're in.
-        import inspect
         tn = cocotb.binary.BinaryValue(value=None, n_bits=4096)
-        tn.buff = inspect.stack()[1][3]
+        tn.buff = test_name
         self.dut.test_name = tn
 
     @cocotb.coroutine
@@ -134,7 +134,7 @@ class SpiboneTest:
 
 @cocotb.test()
 def test_wishbone_write(dut):
-    harness = SpiboneTest(dut)
+    harness = SpiboneTest(dut, inspect.currentframe().f_code.co_name)
     yield harness.reset()
     yield harness.write(0x40000000, 0x12345678)
     val = yield harness.read(0x40000000)
@@ -147,9 +147,9 @@ def test_wishbone_write(dut):
         raise TestFailure("wishbone check failed -- expected 0x54, got 0x{:02x}".format(val))
 
 @cocotb.coroutine
-def test_spibone_write(dut, canary):
+def test_spibone_write(dut, test_name, canary):
     addr = 0x40000004
-    harness = SpiboneTest(dut)
+    harness = SpiboneTest(dut, test_name)
     yield harness.reset()
     yield harness.host_spi_write(addr, canary)
     check_canary = yield harness.read(addr)
@@ -157,9 +157,9 @@ def test_spibone_write(dut, canary):
         raise TestFailure("check_canary 0x{:08x} doesn't match written value 0x{:08x}".format(check_canary, canary))
 
 @cocotb.coroutine
-def test_spibone_read(dut, canary):
+def test_spibone_read(dut, test_name, canary):
     addr = 0x40000004
-    harness = SpiboneTest(dut)
+    harness = SpiboneTest(dut, test_name)
     yield harness.reset()
 
     yield harness.write(addr, canary)
@@ -169,16 +169,16 @@ def test_spibone_read(dut, canary):
 
 @cocotb.test()
 def test_spibone_read_aaaaaaaa(dut):
-    yield test_spibone_read(dut, 0xaaaaaaaa)
+    yield test_spibone_read(dut, inspect.currentframe().f_code.co_name, 0xaaaaaaaa)
 
 @cocotb.test()
 def test_spibone_read_55555555(dut):
-    yield test_spibone_read(dut, 0x55555555)
+    yield test_spibone_read(dut, inspect.currentframe().f_code.co_name, 0x55555555)
 
 @cocotb.test()
 def test_spibone_write_aaaaaaaa(dut):
-    yield test_spibone_write(dut, 0xaaaaaaaa)
+    yield test_spibone_write(dut, inspect.currentframe().f_code.co_name, 0xaaaaaaaa)
 
 @cocotb.test()
 def test_spibone_write_55555555(dut):
-    yield test_spibone_write(dut, 0x55555555)
+    yield test_spibone_write(dut, inspect.currentframe().f_code.co_name, 0x55555555)
