@@ -95,9 +95,9 @@ class SpiboneTest:
         # Wait for response
         timeout_counter = 0
         while True:
+            yield self.host_spi_tick()
             if self.dut.spi_miso == 0 and (timeout_counter % 8) == 0:
                 break
-            yield self.host_spi_tick()
             timeout_counter = timeout_counter + 1
             if timeout_counter > 200:
                 raise TestFailure("timed out waiting for response")
