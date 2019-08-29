@@ -1,5 +1,5 @@
 from migen import *
-from migen.fhdl.specials import Tristate
+from migen.fhdl.specials import Tristate, TSTriple
 from migen.genlib.cdc import MultiReg
 
 from litex.soc.interconnect import wishbone, stream
@@ -18,7 +18,7 @@ class SpiWishboneBridge(Module):
     until it has a response, at which point it outputs "00" (write)
     or "01" (read).
     """
-    def __init__(self, pads, with_tristate=True):
+    def __init__(self, pads, three_wire=False, with_tristate=True):
         self.wishbone = wishbone.Interface()
 
         # # #
@@ -27,6 +27,7 @@ class SpiWishboneBridge(Module):
         cs_n = Signal()
         mosi = Signal()
         miso = Signal()
+        miso_en = Signal()
 
         counter = Signal(8)
         command = Signal(8)
@@ -37,12 +38,19 @@ class SpiWishboneBridge(Module):
         self.specials += [
             MultiReg(pads.clk, clk),
             MultiReg(pads.cs_n, cs_n),
-            MultiReg(pads.mosi, mosi)
         ]
-        if with_tristate:
-            self.specials += Tristate(pads.miso, miso, ~cs_n)
+        if three_wire:
+            io = TSTriple()
+            self.specials += io.get_tristate(pads.mosi)
+            self.specials += MultiReg(io.i, mosi)
+            self.comb += io.o.eq(miso)
+            self.comb += io.oe.eq(miso_en)
         else:
-            self.comb += pads.miso.eq(miso)
+            self.specials += MultiReg(pads.mosi, mosi)
+            if with_tristate:
+                self.specials += Tristate(pads.miso, miso, ~cs_n)
+            else:
+                self.comb += pads.miso.eq(miso)
 
         clk_last = Signal()
         clk_rising = Signal()
@@ -62,6 +70,7 @@ class SpiWishboneBridge(Module):
         ]
 
         fsm.act("IDLE",
+            miso_en.eq(0),
             NextValue(miso, 1),
             If(clk_rising,
                 NextValue(counter, 0),
@@ -72,6 +81,7 @@ class SpiWishboneBridge(Module):
 
         # Determine if it's a read or a write
         fsm.act("GET_TYPE_BYTE",
+            miso_en.eq(0),
             If(counter == 7,
                 NextValue(counter, 0),
                 NextValue(address, Cat(mosi, address)),
@@ -95,6 +105,7 @@ class SpiWishboneBridge(Module):
         )
 
         fsm.act("READ_ADDRESS",
+            miso_en.eq(0),
             If(counter == 32,
                 NextValue(counter, 0),
                 If(wr,
@@ -110,6 +121,7 @@ class SpiWishboneBridge(Module):
         )
 
         fsm.act("READ_VALUE",
+            miso_en.eq(0),
             If(counter == 32,
                 NextValue(counter, 0),
                 NextState("WRITE_WISHBONE"),
@@ -124,6 +136,7 @@ class SpiWishboneBridge(Module):
             self.wishbone.stb.eq(1),
             self.wishbone.we.eq(1),
             self.wishbone.cyc.eq(1),
+            miso_en.eq(1),
             If(self.wishbone.ack | self.wishbone.err,
                 NextState("WAIT_BYTE_BOUNDARY"),
             ),
@@ -136,6 +149,7 @@ class SpiWishboneBridge(Module):
             self.wishbone.stb.eq(1),
             self.wishbone.we.eq(0),
             self.wishbone.cyc.eq(1),
+            miso_en.eq(1),
             If(self.wishbone.ack | self.wishbone.err,
                 NextState("WAIT_BYTE_BOUNDARY"),
                 NextValue(value, self.wishbone.dat_r),
@@ -146,6 +160,7 @@ class SpiWishboneBridge(Module):
         )
 
         fsm.act("WAIT_BYTE_BOUNDARY",
+            miso_en.eq(1),
             If(counter[0:3] == 0,
                 If(wr,
                     NextState("END"),
@@ -162,6 +177,7 @@ class SpiWishboneBridge(Module):
 
         # Write the "00" byte that indicates a response
         fsm.act("WRITE_RESPONSE",
+            miso_en.eq(1),
             If(counter == 7,
                 NextValue(miso, 1),
                 NextValue(counter, 33),
@@ -174,6 +190,7 @@ class SpiWishboneBridge(Module):
 
         # Write the actual value
         fsm.act("WRITE_VALUE",
+            miso_en.eq(1),
             If(counter == 0,
                 NextState("END"),
             ),
@@ -184,5 +201,6 @@ class SpiWishboneBridge(Module):
         )
 
         fsm.act("END",
+            miso_en.eq(1),
             NextValue(miso, 0),
         )
