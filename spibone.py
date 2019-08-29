@@ -29,10 +29,10 @@ class SpiWishboneBridge(Module):
         miso = Signal()
 
         counter = Signal(8)
-        current_byte = Signal(8)
+        command = Signal(8)
         address = Signal(32)
-        value = Signal(32)
-        wr = Signal()
+        value   = Signal(32)
+        wr      = Signal()
 
         self.specials += [
             MultiReg(pads.clk, clk),
@@ -62,55 +62,61 @@ class SpiWishboneBridge(Module):
         ]
 
         fsm.act("IDLE",
+            NextValue(miso, 1),
             If(clk_rising,
                 NextValue(counter, 0),
-                NextState("RDWR")
+                NextState("GET_TYPE_BYTE"),
+                NextValue(command, mosi),
             ),
         )
 
         # Determine if it's a read or a write
-        fsm.act("RDWR",
-            If(counter == 8,
+        fsm.act("GET_TYPE_BYTE",
+            If(counter == 7,
                 NextValue(counter, 0),
+                NextValue(address, Cat(mosi, address)),
+
                 # Write value
-                If(current_byte == 0,
+                If(command == 0,
                     NextValue(wr, 1),
                     NextState("READ_ADDRESS"),
+
                 # Read value
-                ).Elif(current_byte == 1,
-                    NextValue(wr, 1),
+                ).Elif(command == 1,
+                    NextValue(wr, 0),
                     NextState("READ_ADDRESS"),
                 ).Else(
                     NextState("END"),
                 ),
             ).Elif(clk_rising,
-                NextValue(current_byte, Cat(mosi, current_byte)),
                 NextValue(counter, counter + 1),
+                NextValue(command, Cat(mosi, command)),
             ),
         )
 
         fsm.act("READ_ADDRESS",
             If(counter == 32,
                 NextValue(counter, 0),
-                NextValue(miso, 1),
                 If(wr,
-                    NextState("READ_VALUE")
+                    NextState("READ_VALUE"),
+                    NextValue(value, Cat(mosi, value)),
                 ).Else(
-                    NextState("READ_WISHBONE")
+                    NextState("READ_WISHBONE"),
                 )
             ).Elif(clk_rising,
                 NextValue(counter, counter + 1),
-                NextValue(address, Cat(mosi, address))
+                NextValue(address, Cat(mosi, address)),
             ),
         )
 
         fsm.act("READ_VALUE",
             If(counter == 32,
                 NextValue(counter, 0),
-                NextState("WRITE_WISHBONE")
-            ).Elif(clk_rising,
+                NextState("WRITE_WISHBONE"),
+            ),
+            If(clk_rising,
                 NextValue(counter, counter + 1),
-                NextValue(value, Cat(mosi, value))
+                NextValue(value, Cat(mosi, value)),
             ),
         )
 
@@ -129,7 +135,8 @@ class SpiWishboneBridge(Module):
             self.wishbone.we.eq(0),
             self.wishbone.cyc.eq(1),
             If(self.wishbone.ack | self.wishbone.err,
-                NextState("WAIT_BYTE_BOUNDARY")
+                NextState("WAIT_BYTE_BOUNDARY"),
+                NextValue(value, self.wishbone.dat_r),
             ),
             If(clk_rising,
                 NextValue(counter, counter + 1),
@@ -137,7 +144,7 @@ class SpiWishboneBridge(Module):
         )
 
         fsm.act("WAIT_BYTE_BOUNDARY",
-            If(counter[0:2] == 0,
+            If(counter[0:3] == 0,
                 NextState("WRITE_RESPONSE"),
                 NextValue(miso, 0),
                 NextValue(counter, 0),
@@ -147,10 +154,11 @@ class SpiWishboneBridge(Module):
             ),
         )
 
+        # Write the "00" byte that indicates a response
         fsm.act("WRITE_RESPONSE",
             If(counter == 7,
-                NextValue(miso, 1),
-                NextValue(counter, 0),
+                NextValue(miso, 0),
+                NextValue(counter, 33),
                 NextState("WRITE_VALUE")
             ),
             If(clk_rising,
@@ -158,13 +166,17 @@ class SpiWishboneBridge(Module):
             ),
         )
 
+        # Write the actual value
         fsm.act("WRITE_VALUE",
-            NextValue(miso, value >> counter),
-            If(counter == 32,
+            If(counter == 0,
                 NextState("END"),
             ),
             If(clk_rising,
-                NextValue(counter, counter + 1),
+                NextValue(miso, value >> (counter - 2)),
+                NextValue(counter, counter - 1),
             ),
         )
-        fsm.act("END")
+
+        fsm.act("END",
+            NextValue(miso, 0),
+        )
