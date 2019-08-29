@@ -1,0 +1,18 @@
+[submodule "deps/litex"]
+	path = deps/litex
+	url = https://github.com/enjoy-digital/litex.git
+[submodule "deps/litescope"]
+	path = deps/litescope
+	url = https://github.com/enjoy-digital/litescope.git
+[submodule "deps/litedram"]
+	path = deps/litedram
+	url = https://github.com/enjoy-digital/litedram.git
+[submodule "deps/migen"]
+	path = deps/migen
+	url = https://github.com/m-labs/migen.git
+[submodule "deps/litex_boards"]
+	path = deps/litex_boards
+	url = https://github.com/litex-hub/litex-boards.git
+[submodule "deps/pyserial"]
+	path = deps/pyserial
+	url = https://github.com/pyserial/pyserial.git
