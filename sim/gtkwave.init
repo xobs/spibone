@@ -5,10 +5,10 @@ gtkwave::/Edit/Highlight_All
 gtkwave::/Edit/Data_Format/ASCII
 
 # Add the USB decoder line
-set usb_sig [ list tb.usb_d_n tb.usb_d_p ]
-gtkwave::addSignalsFromList $usb_sig
-gtkwave::highlightSignalsFromList $usb_sig
-gtkwave::/Edit/Combine_Down "usb_decoded"
-gtkwave::highlightSignalsFromList "usb_decoded"
-gtkwave::setCurrentTranslateTransProc ./gtkwave-decode-usb.sh
+set spi_sig [ list tb.spi_miso tb.spi_mosi tb.spi_cs_n tb.spi_clk ]
+gtkwave::addSignalsFromList $spi_sig
+gtkwave::highlightSignalsFromList $spi_sig
+gtkwave::/Edit/Combine_Down "spi_decoded"
+gtkwave::highlightSignalsFromList "spi_decoded"
+gtkwave::setCurrentTranslateTransProc ./gtkwave-decode-spi.sh
 gtkwave::installTransFilter 1

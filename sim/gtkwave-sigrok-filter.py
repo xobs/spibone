@@ -144,6 +144,7 @@ COLORS = [
 
 def pick_color():
 	color = COLORS[random.randrange(0, len(COLORS)-1)]
+	sys.stderr.write(">>> Picked color: {}\n".format(color))
 	return color
 
 

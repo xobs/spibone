@@ -17,6 +17,7 @@ from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.fhdl.specials import TSTriple
 from migen.fhdl.bitcontainer import bits_for
 from migen.fhdl.structure import ClockSignal, ResetSignal, Replicate, Cat
+from migen.fhdl.decorators import ClockDomainsRenamer
 
 from litex.build.sim.platform import SimPlatform
 from litex.build.generic_platform import Pins, IOStandard, Misc, Subsignal
@@ -71,28 +72,28 @@ class _CRG(Module):
         clk12 = Signal()
 
         self.clock_domains.cd_sys = ClockDomain()
-        self.clock_domains.cd_usb_12 = ClockDomain()
-        self.clock_domains.cd_usb_48 = ClockDomain()
-        self.clock_domains.cd_usb_48_to_12 = ClockDomain()
+        self.clock_domains.cd_clk_12 = ClockDomain()
+        self.clock_domains.cd_clk_48 = ClockDomain()
+        self.clock_domains.cd_clk_48_to_12 = ClockDomain()
 
         clk48 = clk.clk48
         self.comb += clk.clk12.eq(clk12)
 
-        self.comb += self.cd_usb_48.clk.eq(clk48)
-        self.comb += self.cd_usb_48_to_12.clk.eq(clk48)
+        self.comb += self.cd_clk_48.clk.eq(clk48)
+        self.comb += self.cd_clk_48_to_12.clk.eq(clk48)
 
         clk12_counter = Signal(2)
-        self.sync.usb_48_to_12 += clk12_counter.eq(clk12_counter + 1)
+        self.sync.clk_48_to_12 += clk12_counter.eq(clk12_counter + 1)
 
         self.comb += clk12.eq(clk12_counter[1])
 
         self.comb += self.cd_sys.clk.eq(clk12)
-        self.comb += self.cd_usb_12.clk.eq(clk12)
+        self.comb += self.cd_clk_12.clk.eq(clk12)
 
         self.comb += [
             ResetSignal("sys").eq(rst),
-            ResetSignal("usb_12").eq(rst),
-            ResetSignal("usb_48").eq(rst),
+            ResetSignal("clk_12").eq(rst),
+            ResetSignal("clk_48").eq(rst),
         ]
 
 class Platform(SimPlatform):
@@ -130,7 +131,7 @@ class BaseSoC(SoCCore):
 
         # Add SPI
         spi_pads = platform.request("spi")
-        self.submodules.spibone = spibone.SpiWishboneBridge(spi_pads)
+        self.submodules.spibone = ClockDomainsRenamer("clk_48")(spibone.SpiWishboneBridge(spi_pads))
         self.add_wb_master(self.spibone.wishbone)
 
         class _WishboneBridge(Module):
