@@ -112,7 +112,7 @@ class BaseSoC(SoCCore):
         "csr":      0x60000000,  # (default shadow @0xe0000000)
     }
 
-    def __init__(self, platform, output_dir="build", usb_variant='dummy', **kwargs):
+    def __init__(self, platform, output_dir="build", **kwargs):
         # Disable integrated RAM as we'll add it later
         self.integrated_sram_size = 0
 
