@@ -26,3 +26,9 @@ test/
 
 # Output from yosys
 abc.history
+
+# Simulation artifacts
+sim/csr.csv
+sim/dump.vcd
+sim/dut.v
+sim/sim_build
