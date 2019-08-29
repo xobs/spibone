@@ -25,3 +25,24 @@ class BaseSoC(SoCCore):
         self.submodules.spibone = ClockDomainsRenamer("clk_48")(spibone.SpiWishboneBridge(spi_pads))
         self.add_wb_master(self.spibone.wishbone)
 ```
+
+## Protocol
+
+The protocol for the SPI bridge is big-endian.  There are two distinct operations: Read and Write.
+
+```
+Read protocol:
+    Write: 01 | AA | AA | AA | AA
+    [Wishbone Operation]
+    Read:  01 | VV | VV | VV | VV
+Write protocol:
+    Write: 00 | AA | AA | AA | AA | VV | VV | VV | VV
+    [Wishbone Operation]
+    Read:  00
+```
+
+"AA" is address, "VV" is value.  All bytes are big-endian. During the "Wishbone Operation" phase, the host constantly outputs "FF" until it has a response, at which point it outputs "00" (write) or "01" (read).  All output is byte-aligned.
+
+## Three-wire mode
+
+It is possible to enable three-wire mode.  In this mode, the `mosi` wire is used for transmit and receive.  During the `Wishbone Operation` phase, the wire is changed from an input to an output.
