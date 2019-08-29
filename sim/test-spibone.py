@@ -9,24 +9,8 @@ from wishbone import WishboneMaster, WBOp
 import logging
 import csv
 
-def grouper_tofit(n, iterable):
-    from itertools import zip_longest
-    """Group iterable into multiples of n, except don't leave
-    trailing None values at the end.
-    """
-    # itertools.zip_longest is broken because it requires you to fill in some
-    # value, and doesn't mention anything else in its documentation that would
-    # not require this behavior.
-    # Re-do the array to shrink it down if any None values are discovered.
-    broken = zip_longest(*[iter(iterable)]*n, fillvalue=None)
-    fixed = []
-    for e in broken:
-        f = []
-        for el in e:
-            if el is not None:
-                f.append(el)
-        fixed.append(f)
-    return fixed
+# Disable pylint's E1101, which breaks on our wishbone addresses
+#pylint:disable=E1101
 
 class SpiboneTest:
     def __init__(self, dut):
@@ -73,3 +57,8 @@ def test_wishbone_write(dut):
     val = yield harness.read(0x40000000)
     if val != 0x12345678:
         raise TestFailure("memory check failed -- expected 0x12345678, got 0x{:08x}".format(val))
+
+    yield harness.write(harness.CTRL_SCRATCH, 0x54)
+    val = yield harness.read(harness.CTRL_SCRATCH)
+    if val != 0x54:
+        raise TestFailure("wishbone check failed -- expected 0x54, got 0x{:02x}".format(val))

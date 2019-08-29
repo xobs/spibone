@@ -28,6 +28,11 @@ from litex.soc.interconnect.csr import AutoCSR, CSRStatus, CSRStorage
 
 import argparse
 import os
+import sys
+
+# Add parent directory to search path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)))
+import spibone
 
 _io = [
     ("wishbone", 0,
@@ -47,7 +52,7 @@ _io = [
         Subsignal("miso", Pins(1)),
         Subsignal("mosi", Pins(1)),
         Subsignal("clk", Pins(1)),
-        Subsignal("cs", Pins(1)),
+        Subsignal("cs_n", Pins(1)),
     ),
     ("clk", 0,
         Subsignal("clk48", Pins(1)),
@@ -125,18 +130,8 @@ class BaseSoC(SoCCore):
 
         # Add SPI
         spi_pads = platform.request("spi")
-        # usb_pads = platform.request("usb")
-        # usb_iobuf = usbio.IoBuf(usb_pads.d_p, usb_pads.d_n, usb_pads.pullup)
-        # self.comb += usb_pads.tx_en.eq(usb_iobuf.usb_tx_en)
-        # if usb_variant == 'eptri':
-        #     self.submodules.usb = eptri.TriEndpointInterface(usb_iobuf, debug=True)
-        # elif usb_variant == 'epfifo':
-        #     self.submodules.usb = epfifo.PerEndpointFifoInterface(usb_iobuf, debug=True)
-        # elif usb_variant == 'dummy':
-        #     self.submodules.usb = dummyusb.DummyUsb(usb_iobuf, debug=True)
-        # else:
-        #     raise ValueError('Invalid endpoints value. It is currently \'eptri\' and \'dummy\'')
-        # self.add_wb_master(self.usb.debug_bridge.wishbone)
+        self.submodules.spibone = spibone.SpiWishboneBridge(spi_pads)
+        self.add_wb_master(self.spibone.wishbone)
 
         class _WishboneBridge(Module):
             def __init__(self, interface):

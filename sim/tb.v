@@ -7,7 +7,7 @@ module tb(
 
 	input spi_mosi,
 	output spi_miso,
-	input spi_cs,
+	input spi_cs_n,
 	input spi_clk,
 
 	input [29:0] wishbone_adr,
@@ -31,7 +31,7 @@ dut dut (
 
 	.spi_mosi(spi_mosi),
 	.spi_miso(spi_miso),
-	.spi_cs(spi_cs),
+	.spi_cs_n(spi_cs_n),
 	.spi_clk(spi_clk),
 
 	.wishbone_adr(wishbone_adr),

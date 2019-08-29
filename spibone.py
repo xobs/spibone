@@ -2,16 +2,24 @@ from migen import *
 from migen.fhdl.specials import Tristate
 from migen.genlib.cdc import MultiReg
 
-from litex.soc.interconnect import csr_bus
+from litex.soc.interconnect import wishbone, stream
 
 
-class SPIControl(Module):
+class SpiWishboneBridge(Module):
     """SPI Control (CPOL0 / CPHA0)
-    proto:   | 16 bits command | n x 8 bits r/w |
-    command: | 15: 1:write/0: read |  13-0: adr |
+    Read protocol:
+        Write: 01 | AA | AA | AA | AA
+        Read:  01 | VV | VV | VV | VV
+    Write protocol:
+        Write: 00 | AA | AA | AA | AA | VV | VV | VV | VV
+        Read:  00
+    "AA" is address, "VV" is value.  All bytes are big-endian.
+    During the "Read" phase, the host constantly outputs "FF"
+    until it has a response, at which point it outputs "00" (write)
+    or "01" (read).
     """
-    def __init__(self, pads, base=0x000, end=0x0ff, with_tristate=True):
-        self.csr = csr = csr_bus.Interface()
+    def __init__(self, pads, with_tristate=True):
+        self.wishbone = wishbone.Interface()
 
         # # #
 
@@ -19,9 +27,12 @@ class SPIControl(Module):
         cs_n = Signal()
         mosi = Signal()
         miso = Signal()
-        we = Signal()
+
         counter = Signal(8)
-        senable = Signal()
+        current_byte = Signal(8)
+        address = Signal(32)
+        value = Signal(32)
+        wr = Signal()
 
         self.specials += [
             MultiReg(pads.clk, clk),
@@ -43,61 +54,117 @@ class SPIControl(Module):
         self.submodules += fsm
         self.comb += fsm.reset.eq(cs_n)
 
+        # Connect the Wishbone bus up to our values
+        self.comb += [
+            self.wishbone.adr.eq(address[2:]),
+            self.wishbone.dat_w.eq(value),
+            self.wishbone.sel.eq(2**len(self.wishbone.sel) - 1)
+        ]
+
         fsm.act("IDLE",
             If(clk_rising,
-                NextValue(we, mosi),
-                NextValue(counter, 1),
-                NextState("ADR")
-            ),
-            senable.eq(1)
-         )
-        fsm.act("ADR",
-            If(counter == 16,
                 NextValue(counter, 0),
-                If((csr.adr >= base) & (csr.adr <= end),
-                    If(we,
-                        NextState("WRITE")
-                    ).Else(
-                        NextState("READ")
-                    )
+                NextState("RDWR")
+            ),
+        )
+
+        # Determine if it's a read or a write
+        fsm.act("RDWR",
+            If(counter == 8,
+                NextValue(counter, 0),
+                # Write value
+                If(current_byte == 0,
+                    NextValue(wr, 1),
+                    NextState("READ_ADDRESS"),
+                # Read value
+                ).Elif(current_byte == 1,
+                    NextValue(wr, 1),
+                    NextState("READ_ADDRESS"),
                 ).Else(
-                    NextState("END")
+                    NextState("END"),
+                ),
+            ).Elif(clk_rising,
+                NextValue(current_byte, Cat(mosi, current_byte)),
+                NextValue(counter, counter + 1),
+            ),
+        )
+
+        fsm.act("READ_ADDRESS",
+            If(counter == 32,
+                NextValue(counter, 0),
+                NextValue(miso, 1),
+                If(wr,
+                    NextState("READ_VALUE")
+                ).Else(
+                    NextState("READ_WISHBONE")
                 )
             ).Elif(clk_rising,
                 NextValue(counter, counter + 1),
-                NextValue(csr.adr, Cat(mosi, csr.adr))
+                NextValue(address, Cat(mosi, address))
             ),
-            senable.eq(1)
-         )
-        fsm.act("WRITE",
-            If(counter == 8,
-                self.csr.we.eq(1),
+        )
+
+        fsm.act("READ_VALUE",
+            If(counter == 32,
                 NextValue(counter, 0),
-                If(csr.adr == end,
-                    NextState("END")
-                ).Else(
-                    NextValue(csr.adr, csr.adr + 1)
-                )
+                NextState("WRITE_WISHBONE")
             ).Elif(clk_rising,
                 NextValue(counter, counter + 1),
-                NextValue(csr.dat_w, Cat(mosi, csr.dat_w))
-            )
+                NextValue(value, Cat(mosi, value))
+            ),
         )
-        dat_r = Signal(8)
-        fsm.act("READ",
-            If(counter == 8,
+
+        fsm.act("WRITE_WISHBONE",
+            self.wishbone.stb.eq(1),
+            self.wishbone.we.eq(1),
+            self.wishbone.cyc.eq(1),
+            If(self.wishbone.ack | self.wishbone.err,
+                NextState("END"),
+                NextValue(miso, 0),
+            ),
+        )
+
+        fsm.act("READ_WISHBONE",
+            self.wishbone.stb.eq(1),
+            self.wishbone.we.eq(0),
+            self.wishbone.cyc.eq(1),
+            If(self.wishbone.ack | self.wishbone.err,
+                NextState("WAIT_BYTE_BOUNDARY")
+            ),
+            If(clk_rising,
+                NextValue(counter, counter + 1),
+            ),
+        )
+
+        fsm.act("WAIT_BYTE_BOUNDARY",
+            If(counter[0:2] == 0,
+                NextState("WRITE_RESPONSE"),
+                NextValue(miso, 0),
                 NextValue(counter, 0),
-                If(csr.adr == end,
-                    NextState("END")
-                ).Else(
-                    NextValue(csr.adr, csr.adr + 1)
-                )
-            ).Elif(clk_rising,
-                NextValue(dat_r, Cat(Signal(), dat_r)),
-                NextValue(counter, counter + 1)
-            ).Elif(counter == 0,
-                NextValue(dat_r, csr.dat_r)
-            )
+            ),
+            If(clk_rising,
+                NextValue(counter, counter + 1),
+            ),
         )
-        self.comb += miso.eq(dat_r[7])
+
+        fsm.act("WRITE_RESPONSE",
+            If(counter == 7,
+                NextValue(miso, 1),
+                NextValue(counter, 0),
+                NextState("WRITE_VALUE")
+            ),
+            If(clk_rising,
+                NextValue(counter, counter + 1),
+            ),
+        )
+
+        fsm.act("WRITE_VALUE",
+            NextValue(miso, value >> counter),
+            If(counter == 32,
+                NextState("END"),
+            ),
+            If(clk_rising,
+                NextValue(counter, counter + 1),
+            ),
+        )
         fsm.act("END")
