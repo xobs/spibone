@@ -161,7 +161,9 @@ class SpiWishboneBridge(Module):
 
         fsm.act("WAIT_BYTE_BOUNDARY",
             miso_en.eq(1),
-            If(counter[0:3] == 0,
+            If(clk_rising,
+                NextValue(counter, counter + 1),
+            ).Elif(counter[0:3] == 0,
                 If(wr,
                     NextState("END"),
                 ).Else(
@@ -169,9 +171,6 @@ class SpiWishboneBridge(Module):
                 ),
                 NextValue(miso, 0),
                 NextValue(counter, 0),
-            ),
-            If(clk_rising,
-                NextValue(counter, counter + 1),
             ),
         )
 

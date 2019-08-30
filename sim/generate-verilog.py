@@ -121,7 +121,7 @@ class BaseSoC(SoCCore):
         clk_freq = int(12e6)
         self.submodules.crg = _CRG(platform)
 
-        SoCCore.__init__(self, platform, clk_freq, 
+        SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,
             integrated_rom_size=0x0,
             integrated_sram_size=0x0,
