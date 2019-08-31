@@ -4,10 +4,18 @@ gtkwave::addSignalsFromList "test_name"
 gtkwave::/Edit/Highlight_All
 gtkwave::/Edit/Data_Format/ASCII
 
-# Add the USB decoder line
+# Add the SPI decoder lines
 set spi_sig [ list tb.spi_miso tb.spi_mosi tb.spi_cs_n tb.spi_clk ]
+gtkwave::/Edit/Insert_Comment "spi1"
+gtkwave::/Edit/Insert_Comment "spi2"
+gtkwave::/Edit/Insert_Comment "spi3"
+gtkwave::/Edit/Insert_Comment "spi4"
+gtkwave::/Edit/Insert_Comment "spi5"
 gtkwave::addSignalsFromList $spi_sig
-gtkwave::highlightSignalsFromList $spi_sig
+
+# Select all the signals and apply a translation process
+gtkwave::/Edit/Highlight_All
+gtkwave::/Edit/UnHighlight_Regexp "test_name"
 gtkwave::/Edit/Combine_Down "spi_decoded"
 gtkwave::highlightSignalsFromList "spi_decoded"
 gtkwave::setCurrentTranslateTransProc ./gtkwave-decode-spi.sh
