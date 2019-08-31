@@ -1,7 +1,7 @@
 # Tests for Wishbone-over-SPI
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, FallingEdge, NullTrigger, Timer
+from cocotb.triggers import RisingEdge, FallingEdge, Edge, NullTrigger, Timer
 from cocotb.result import TestFailure, TestSuccess, ReturnValue
 
 from wishbone import WishboneMaster, WBOp
@@ -18,7 +18,9 @@ class SpiboneTest:
     def __init__(self, dut, test_name):
         self.twi = "THREEWIRE" in os.environ
         self.dut = dut
+        self.test_name = test_name
         self.csrs = dict()
+        self.dut.reset = 1
         with open("csr.csv", newline='') as csr_csv_file:
             csr_csv = csv.reader(csr_csv_file)
             # csr_register format: csr_register, name, address, size, rw/ro
@@ -35,6 +37,54 @@ class SpiboneTest:
         self.dut.test_name = tn
 
     @cocotb.coroutine
+    # Validate that the MOSI line doesn't change while CLK is 1
+    def validate_mosi_stability(self, test_name):
+        previous_clk = self.dut.spi_clk
+        previous_val = self.dut.spi_mosi
+        while True:
+            v = self.dut.spi_cs_n.value
+            v_str = "{}".format(v)
+            # self.dut._log.error("{} - CS_N value: {}  Reset value: {}".format(test_name, v_str, self.dut.reset))
+            if v_str == "0" and self.dut.reset == 0:
+                if self.dut.spi_clk:
+                    # Clock went high, so capture value
+                    if previous_clk == 0:
+                        previous_val = self.dut.spi_mosi
+                    else:
+                        if int(self.dut.spi_mosi) != int(previous_val):
+                            raise TestFailure("spi.mosi changed while clk was high (was {}, now {})".format(previous_val, self.dut.spi_mosi))
+                previous_clk = self.dut.spi_clk
+            # else:
+            #     self.dut._log.error("CS_N is Z")
+            yield Edge(self.dut.clk48)
+
+    @cocotb.coroutine
+    # Validate that the MOSI and MISO line don't change while CLK is 1
+    def validate_mosi_miso_stability(self, test_name):
+        previous_clk = self.dut.spi_clk
+        previous_mosi = self.dut.spi_mosi
+        previous_miso = self.dut.spi_miso
+        while True:
+            v = self.dut.spi_cs_n.value
+            v_str = "{}".format(v)
+            # self.dut._log.error("{} - CS_N value: {}  Reset value: {}".format(test_name, v_str, self.dut.reset))
+            if v_str == "0" and self.dut.reset == 0:
+                if self.dut.spi_clk:
+                    # Clock went high, so capture value
+                    if previous_clk == 0:
+                        previous_mosi = self.dut.spi_mosi
+                        previous_miso = self.dut.spi_miso
+                    else:
+                        if int(self.dut.spi_mosi) != int(previous_mosi):
+                            raise TestFailure("spi.mosi changed while clk was high (was {}, now {})".format(previous_mosi, self.dut.spi_mosi))
+                        if int(self.dut.spi_miso) != int(previous_miso):
+                            raise TestFailure("spi.mosi changed while clk was high (was {}, now {})".format(previous_miso, self.dut.spi_miso))
+                previous_clk = self.dut.spi_clk
+            # else:
+            #     self.dut._log.error("CS_N is Z")
+            yield Edge(self.dut.clk48)
+
+    @cocotb.coroutine
     def write(self, addr, val):
         yield self.wb.write(addr, val)
 
@@ -46,19 +96,23 @@ class SpiboneTest:
     @cocotb.coroutine
     def reset(self):
         self.dut.reset = 1
-        self.spi_cs_n = 1
+        self.dut.spi_cs_n = 1
+        self.dut.spi_mosi = 0
+        self.dut.spi_clk = 0
         yield RisingEdge(self.dut.clk12)
         yield RisingEdge(self.dut.clk12)
+        cocotb.fork(self.validate_mosi_miso_stability(self.test_name))
         self.dut.reset = 0
-        self.spi_mosi = 0
-        self.spi_clk = 0
-        self.spi_cs_n = 1
+        self.dut.spi_mosi = 0
+        self.dut.spi_clk = 0
+        self.dut.spi_cs_n = 1
+        yield RisingEdge(self.dut.clk12)
         yield RisingEdge(self.dut.clk12)
 
     @cocotb.coroutine
     def host_spi_tick(self):
         self.dut.spi_clk = 0
-        yield FallingEdge(self.dut.clk12)
+        yield RisingEdge(self.dut.clk12)
         self.dut.spi_clk = 1
         yield RisingEdge(self.dut.clk12)
 
