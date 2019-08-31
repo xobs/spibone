@@ -126,11 +126,11 @@ class SpiboneTest:
     def host_spi_read_byte(self):
         val = 0
         for shift in range(7, -1, -1):
+            yield self.host_spi_tick()
             if self.twi:
                 val = val | (int(self.dut.spi_mosi) << shift)
             else:
                 val = val | (int(self.dut.spi_miso) << shift)
-            yield self.host_spi_tick()
         raise ReturnValue(val)
 
     @cocotb.coroutine
@@ -154,20 +154,14 @@ class SpiboneTest:
         # Wait for response
         timeout_counter = 0
         while True:
-            yield self.host_spi_tick()
-            if self.twi:
-                if self.dut.spi_mosi == 0 and (timeout_counter % 8) == 0:
+            val = yield self.host_spi_read_byte()
+            if val != 0xff:
+                if val == 0:
                     break
-            else:
-                if self.dut.spi_miso == 0 and (timeout_counter % 8) == 0:
-                    break
+                raise TestFailure("response byte was 0x{:02x}, not 0x00".format(val))
             timeout_counter = timeout_counter + 1
-            if timeout_counter > 200:
+            if timeout_counter > 20:
                 raise TestFailure("timed out waiting for response")
-
-        val = yield self.host_spi_read_byte()
-        if val != 0:
-            raise TestFailure("response byte was 0x{:02x}, not 0x00".format(val))
         self.dut.spi_cs_n = 1
 
     @cocotb.coroutine
@@ -187,29 +181,20 @@ class SpiboneTest:
         # Wait for response
         timeout_counter = 0
         while True:
-            yield self.host_spi_tick()
-            if self.twi:
-                if self.dut.spi_mosi == 0 and (timeout_counter % 8) == 0:
+            val = yield self.host_spi_read_byte()
+            if val != 0xff:
+                if val == 1:
                     break
-            else:
-                if self.dut.spi_miso == 0 and (timeout_counter % 8) == 0:
-                    break
+                raise TestFailure("response byte was 0x{:02x}, not 0x01".format(val))
             timeout_counter = timeout_counter + 1
-            if timeout_counter > 200:
+            if timeout_counter > 20:
                 raise TestFailure("timed out waiting for response")
-
-        val = yield self.host_spi_read_byte()
-        if val != 0x01:
-            raise TestFailure("response byte was 0x{:02x}, not 0x01".format(val))
 
         # Value
         val = 0
-        for shift in range(31, -1, -1):
-            if self.twi:
-                val = val | (int(self.dut.spi_mosi) << shift)
-            else:
-                val = val | (int(self.dut.spi_miso) << shift)
-            yield self.host_spi_tick()
+        for shift in [24, 16, 8, 0]:
+            addon = yield self.host_spi_read_byte()
+            val = val | (addon << shift)
 
         self.dut.spi_cs_n = 1
         raise ReturnValue(val)

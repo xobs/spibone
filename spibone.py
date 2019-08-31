@@ -30,8 +30,7 @@ class SpiWishboneBridge(Module):
         miso_en = Signal()
 
         counter = Signal(8)
-        write_start = Signal(8)
-        write_offset = Signal(8)
+        write_offset = Signal(5)
         command = Signal(8)
         address = Signal(32)
         value   = Signal(32)
@@ -76,7 +75,6 @@ class SpiWishboneBridge(Module):
         # Constantly have the counter increase, except when it's reset
         # in the IDLE state
         self.sync += If(cs_n, counter.eq(0)).Elif(clk_rising, counter.eq(counter + 1))
-        self.comb += write_offset.eq(counter - write_start)
 
         fsm.act("IDLE",
             miso_en.eq(0),
@@ -142,9 +140,6 @@ class SpiWishboneBridge(Module):
             If(self.wishbone.ack | self.wishbone.err,
                 NextState("WAIT_BYTE_BOUNDARY"),
             ),
-            If(clk_rising,
-                NextValue(counter, counter + 1),
-            ),
         )
 
         fsm.act("READ_WISHBONE",
@@ -155,9 +150,6 @@ class SpiWishboneBridge(Module):
             If(self.wishbone.ack | self.wishbone.err,
                 NextState("WAIT_BYTE_BOUNDARY"),
                 NextValue(value, self.wishbone.dat_r),
-            ),
-            If(clk_rising,
-                NextValue(counter, counter + 1),
             ),
         )
 
@@ -182,7 +174,7 @@ class SpiWishboneBridge(Module):
                 If(counter[0:3] == 0b111,
                     NextValue(miso, 1),
                 ).Elif(counter[0:3] == 0,
-                    NextValue(write_start, counter),
+                    NextValue(write_offset, 31),
                     NextState("WRITE_VALUE")
                 ),
             ),
@@ -191,10 +183,13 @@ class SpiWishboneBridge(Module):
         # Write the actual value
         fsm.act("WRITE_VALUE",
             miso_en.eq(1),
-            NextValue(miso, value >> (31 - write_offset)),
-            If(write_offset[0:4] == 32,
-                NextValue(miso, 0),
-                NextState("END"),
+            NextValue(miso, value >> write_offset),
+            If(clk_falling,
+                NextValue(write_offset, write_offset - 1),
+                If(write_offset == 0,
+                    NextValue(miso, 0),
+                    NextState("END"),
+                ),
             ),
         )
 
