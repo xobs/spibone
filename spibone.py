@@ -30,6 +30,8 @@ class SpiWishboneBridge(Module):
         miso_en = Signal()
 
         counter = Signal(8)
+        write_start = Signal(8)
+        write_offset = Signal(8)
         command = Signal(8)
         address = Signal(32)
         value   = Signal(32)
@@ -54,8 +56,10 @@ class SpiWishboneBridge(Module):
 
         clk_last = Signal()
         clk_rising = Signal()
+        clk_falling = Signal()
         self.sync += clk_last.eq(clk)
         self.comb += clk_rising.eq(clk & ~clk_last)
+        self.comb += clk_falling.eq(~clk & clk_last)
 
         fsm = FSM(reset_state="IDLE")
         fsm = ResetInserter()(fsm)
@@ -69,11 +73,15 @@ class SpiWishboneBridge(Module):
             self.wishbone.sel.eq(2**len(self.wishbone.sel) - 1)
         ]
 
+        # Constantly have the counter increase, except when it's reset
+        # in the IDLE state
+        self.sync += If(cs_n, counter.eq(0)).Elif(clk_rising, counter.eq(counter + 1))
+        self.comb += write_offset.eq(counter - write_start)
+
         fsm.act("IDLE",
             miso_en.eq(0),
             NextValue(miso, 1),
             If(clk_rising,
-                NextValue(counter, 0),
                 NextState("GET_TYPE_BYTE"),
                 NextValue(command, mosi),
             ),
@@ -82,10 +90,8 @@ class SpiWishboneBridge(Module):
         # Determine if it's a read or a write
         fsm.act("GET_TYPE_BYTE",
             miso_en.eq(0),
-            If(counter == 7,
-                NextValue(counter, 0),
-                NextValue(address, Cat(mosi, address)),
-
+            NextValue(miso, 1),
+            If(counter == 8,
                 # Write value
                 If(command == 0,
                     NextValue(wr, 1),
@@ -98,36 +104,32 @@ class SpiWishboneBridge(Module):
                 ).Else(
                     NextState("END"),
                 ),
-            ).Elif(clk_rising,
-                NextValue(counter, counter + 1),
+            ),
+            If(clk_rising,
                 NextValue(command, Cat(mosi, command)),
             ),
         )
 
         fsm.act("READ_ADDRESS",
             miso_en.eq(0),
-            If(counter == 32,
-                NextValue(counter, 0),
+            If(counter == 32 + 8,
                 If(wr,
                     NextState("READ_VALUE"),
-                    NextValue(value, Cat(mosi, value)),
                 ).Else(
                     NextState("READ_WISHBONE"),
                 )
-            ).Elif(clk_rising,
-                NextValue(counter, counter + 1),
+            ),
+            If(clk_rising,
                 NextValue(address, Cat(mosi, address)),
             ),
         )
 
         fsm.act("READ_VALUE",
             miso_en.eq(0),
-            If(counter == 32,
-                NextValue(counter, 0),
+            If(counter == 32 + 32 + 8,
                 NextState("WRITE_WISHBONE"),
             ),
             If(clk_rising,
-                NextValue(counter, counter + 1),
                 NextValue(value, Cat(mosi, value)),
             ),
         )
@@ -161,45 +163,41 @@ class SpiWishboneBridge(Module):
 
         fsm.act("WAIT_BYTE_BOUNDARY",
             miso_en.eq(1),
-            If(clk_rising,
-                NextValue(counter, counter + 1),
-            ).Elif(counter[0:3] == 0,
-                If(wr,
-                    NextState("END"),
-                ).Else(
-                    NextState("WRITE_RESPONSE"),
+            If(clk_falling,
+                If(counter[0:3] == 0,
+                    NextValue(miso, 0),
+                    If(wr,
+                        NextState("END"),
+                    ).Else(
+                        NextState("WRITE_RESPONSE"),
+                    ),
                 ),
-                NextValue(miso, 0),
-                NextValue(counter, 0),
             ),
         )
 
-        # Write the "00" byte that indicates a response
+        # Write the "01" byte that indicates a response
         fsm.act("WRITE_RESPONSE",
             miso_en.eq(1),
-            If(counter == 7,
-                NextValue(miso, 1),
-                NextValue(counter, 33),
-                NextState("WRITE_VALUE")
-            ),
-            If(clk_rising,
-                NextValue(counter, counter + 1),
+            If(clk_falling,
+                If(counter[0:3] == 0b111,
+                    NextValue(miso, 1),
+                ).Elif(counter[0:3] == 0,
+                    NextValue(write_start, counter),
+                    NextState("WRITE_VALUE")
+                ),
             ),
         )
 
         # Write the actual value
         fsm.act("WRITE_VALUE",
             miso_en.eq(1),
-            If(counter == 0,
+            NextValue(miso, value >> (31 - write_offset)),
+            If(write_offset[0:4] == 32,
+                NextValue(miso, 0),
                 NextState("END"),
-            ),
-            If(clk_rising,
-                NextValue(miso, value >> (counter - 2)),
-                NextValue(counter, counter - 1),
             ),
         )
 
         fsm.act("END",
             miso_en.eq(1),
-            NextValue(miso, 0),
         )
