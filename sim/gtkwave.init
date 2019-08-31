@@ -1,21 +1,19 @@
-# Add the signal indicating the test name,
-# and mark it as "ASCII"
+# Add the signal indicating the test name, and mark it as "ASCII"
 gtkwave::addSignalsFromList "test_name"
 gtkwave::/Edit/Highlight_All
 gtkwave::/Edit/Data_Format/ASCII
 
-# Add the SPI decoder lines
+# Add the SPI decoder lines.  They all start with "spi_"
 set spi_sig [ list tb.spi_miso tb.spi_mosi tb.spi_cs_n tb.spi_clk ]
-gtkwave::/Edit/Insert_Comment "spi1"
-gtkwave::/Edit/Insert_Comment "spi2"
-gtkwave::/Edit/Insert_Comment "spi3"
-gtkwave::/Edit/Insert_Comment "spi4"
-gtkwave::/Edit/Insert_Comment "spi5"
+gtkwave::/Edit/Insert_Comment "spi_protocol_1"
+gtkwave::/Edit/Insert_Comment "spi_protocol_2"
+gtkwave::/Edit/Insert_Comment "spi_protocol_3"
+gtkwave::/Edit/Insert_Comment "spi_protocol_4"
+gtkwave::/Edit/Insert_Comment "spi_protocol_5"
 gtkwave::addSignalsFromList $spi_sig
 
 # Select all the signals and apply a translation process
-gtkwave::/Edit/Highlight_All
-gtkwave::/Edit/UnHighlight_Regexp "test_name"
+gtkwave::/Edit/Highlight_Regexp "spi_"
 gtkwave::/Edit/Combine_Down "spi_decoded"
 gtkwave::highlightSignalsFromList "spi_decoded"
 gtkwave::setCurrentTranslateTransProc ./gtkwave-decode-spi.sh
