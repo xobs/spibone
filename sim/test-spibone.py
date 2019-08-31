@@ -16,7 +16,10 @@ import os
 
 class SpiboneTest:
     def __init__(self, dut, test_name):
-        self.twi = "THREEWIRE" in os.environ
+        if "WIRES" in os.environ:
+            self.wires = int(os.environ["WIRES"])
+        else:
+            self.wires = 4
         self.dut = dut
         self.test_name = test_name
         self.csrs = dict()
@@ -63,7 +66,8 @@ class SpiboneTest:
     def validate_mosi_miso_stability(self, test_name):
         previous_clk = self.dut.spi_clk
         previous_mosi = self.dut.spi_mosi
-        previous_miso = self.dut.spi_miso
+        if self.wires == 4:
+            previous_miso = self.dut.spi_miso
         while True:
             v = self.dut.spi_cs_n.value
             v_str = "{}".format(v)
@@ -73,12 +77,14 @@ class SpiboneTest:
                     # Clock went high, so capture value
                     if previous_clk == 0:
                         previous_mosi = self.dut.spi_mosi
-                        previous_miso = self.dut.spi_miso
+                        if self.wires == 4:
+                            previous_miso = self.dut.spi_miso
                     else:
                         if int(self.dut.spi_mosi) != int(previous_mosi):
                             raise TestFailure("spi.mosi changed while clk was high (was {}, now {})".format(previous_mosi, self.dut.spi_mosi))
-                        if int(self.dut.spi_miso) != int(previous_miso):
-                            raise TestFailure("spi.mosi changed while clk was high (was {}, now {})".format(previous_miso, self.dut.spi_miso))
+                        if self.wires == 4:
+                            if int(self.dut.spi_miso) != int(previous_miso):
+                                raise TestFailure("spi.mosi changed while clk was high (was {}, now {})".format(previous_miso, self.dut.spi_miso))
                 previous_clk = self.dut.spi_clk
             # else:
             #     self.dut._log.error("CS_N is Z")
@@ -127,16 +133,42 @@ class SpiboneTest:
         val = 0
         for shift in range(7, -1, -1):
             yield self.host_spi_tick()
-            if self.twi:
+            if self.wires == 3 or self.wires == 2:
                 val = val | (int(self.dut.spi_mosi) << shift)
-            else:
+            elif self.wires == 4:
                 val = val | (int(self.dut.spi_miso) << shift)
         raise ReturnValue(val)
 
     @cocotb.coroutine
-    def host_spi_write(self, addr, val):
-        self.dut.spi_cs_n = 0
+    def host_start(self):
+        if self.wires == 3 or self.wires == 4:
+            self.dut.spi_cs_n = 0
+            self.dut.spi_mosi = 0
+        elif self.wires == 2:
+            yield self.host_spi_write_byte(0xab)
+        if False:
+            yield
+
+    @cocotb.coroutine
+    def host_finish(self):
+        if self.wires == 3 or self.wires == 4:
+            self.dut.spi_cs_n = 1
         self.dut.spi_mosi = 0
+        yield self.host_spi_tick()
+        self.dut.spi_mosi = 0
+        yield self.host_spi_tick()
+        self.dut.spi_mosi = 0
+        yield self.host_spi_tick()
+        self.dut.spi_mosi = 0
+        yield self.host_spi_tick()
+        self.dut.spi_mosi = 0
+        yield self.host_spi_tick()
+        if False:
+            yield
+
+    @cocotb.coroutine
+    def host_spi_write(self, addr, val):
+        yield self.host_start()
 
         # Header
         # 0: Write
@@ -162,12 +194,11 @@ class SpiboneTest:
             timeout_counter = timeout_counter + 1
             if timeout_counter > 20:
                 raise TestFailure("timed out waiting for response")
-        self.dut.spi_cs_n = 1
+        yield self.host_finish()
 
     @cocotb.coroutine
     def host_spi_read(self, addr):
-        self.dut.spi_cs_n = 0
-        self.dut.spi_mosi = 0
+        yield self.host_start()
 
         # Header
         # 0: Write
@@ -197,6 +228,7 @@ class SpiboneTest:
             val = val | (addon << shift)
 
         self.dut.spi_cs_n = 1
+        yield self.host_finish()
         raise ReturnValue(val)
 
 @cocotb.test()

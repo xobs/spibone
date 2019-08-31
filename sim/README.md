@@ -17,7 +17,9 @@ To simulate, you need `iverilog` and `cocotb`.  To view the output, you need `gt
 
 To run the simulator, type `make`.  To run only certain testcases, type `make TESTCASE=[list-of-testcases]`.  For example, `make TESTCASE=test_wishbone_write` or `make TESTCASE=test_spibone_read_aaaaaaaa,test_spibone_read_55555555`.
 
-Spibone supports three-wire mode.  To test three-wire mode, build with `THREEWIRE=1`.  For example, `make THREEWIRE=1`.
+Spibone supports three-wire mode.  To test three-wire mode, build with `WIRES=3`.  For example, `make WIRES=3`.
+
+Spibone also supports two-wire mode.  To test this, build with `make WIRES=2`.
 
 ## Using gtkwave
 

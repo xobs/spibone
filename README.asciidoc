@@ -46,3 +46,7 @@ Write protocol:
 ## Three-wire mode
 
 It is possible to enable three-wire mode.  In this mode, the `mosi` wire is used for transmit and receive.  During the `Wishbone Operation` phase, the wire is changed from an input to an output.
+
+## Two-wire mode
+
+It is also possible to enable two-wire mode.  In this mode, the `CS` pin is removed in favor of a sync byte of `0xab`.

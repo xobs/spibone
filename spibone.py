@@ -18,7 +18,7 @@ class SpiWishboneBridge(Module):
     until it has a response, at which point it outputs "00" (write)
     or "01" (read).
     """
-    def __init__(self, pads, three_wire=False, with_tristate=True):
+    def __init__(self, pads, wires=4, with_tristate=True):
         self.wishbone = wishbone.Interface()
 
         # # #
@@ -35,23 +35,33 @@ class SpiWishboneBridge(Module):
         address = Signal(32)
         value   = Signal(32)
         wr      = Signal()
+        sync_byte = Signal(8)
 
         self.specials += [
             MultiReg(pads.clk, clk),
-            MultiReg(pads.cs_n, cs_n),
         ]
-        if three_wire:
+        if wires == 2:
             io = TSTriple()
             self.specials += io.get_tristate(pads.mosi)
             self.specials += MultiReg(io.i, mosi)
             self.comb += io.o.eq(miso)
             self.comb += io.oe.eq(miso_en)
-        else:
+        elif wires == 3:
+            MultiReg(pads.cs_n, cs_n),
+            io = TSTriple()
+            self.specials += io.get_tristate(pads.mosi)
+            self.specials += MultiReg(io.i, mosi)
+            self.comb += io.o.eq(miso)
+            self.comb += io.oe.eq(miso_en)
+        elif wires == 4:
+            MultiReg(pads.cs_n, cs_n),
             self.specials += MultiReg(pads.mosi, mosi)
             if with_tristate:
                 self.specials += Tristate(pads.miso, miso, ~cs_n)
             else:
                 self.comb += pads.miso.eq(miso)
+        else:
+            raise ValueError("`wires` must be 2, 3, or 4")
 
         clk_last = Signal()
         clk_rising = Signal()
@@ -76,14 +86,28 @@ class SpiWishboneBridge(Module):
         # in the IDLE state
         self.sync += If(cs_n, counter.eq(0)).Elif(clk_rising, counter.eq(counter + 1))
 
-        fsm.act("IDLE",
-            miso_en.eq(0),
-            NextValue(miso, 1),
-            If(clk_rising,
-                NextState("GET_TYPE_BYTE"),
-                NextValue(command, mosi),
-            ),
-        )
+        if wires == 2:
+            fsm.act("IDLE",
+                miso_en.eq(0),
+                NextValue(miso, 1),
+                If(clk_rising,
+                    NextValue(sync_byte, Cat(mosi, sync_byte))
+                ),
+                If(sync_byte[0:7] == 0b101011,
+                    NextState("GET_TYPE_BYTE"),
+                    NextValue(counter, 0),
+                    NextValue(command, mosi),
+                )
+            )
+        elif wires == 3 or wires == 4:
+            fsm.act("IDLE",
+                miso_en.eq(0),
+                NextValue(miso, 1),
+                If(clk_rising,
+                    NextState("GET_TYPE_BYTE"),
+                    NextValue(command, mosi),
+                ),
+            )
 
         # Determine if it's a read or a write
         fsm.act("GET_TYPE_BYTE",
@@ -158,8 +182,9 @@ class SpiWishboneBridge(Module):
             If(clk_falling,
                 If(counter[0:3] == 0,
                     NextValue(miso, 0),
+                    # For writes, fill in the 0 byte response
                     If(wr,
-                        NextState("END"),
+                        NextState("WRITE_WR_RESPONSE"),
                     ).Else(
                         NextState("WRITE_RESPONSE"),
                     ),
@@ -193,6 +218,22 @@ class SpiWishboneBridge(Module):
             ),
         )
 
-        fsm.act("END",
+        fsm.act("WRITE_WR_RESPONSE",
             miso_en.eq(1),
+            If(clk_falling,
+                If(counter[0:3] == 0,
+                    NextState("END"),
+                ),
+            ),
         )
+
+        if wires == 3 or wires == 4:
+            fsm.act("END",
+                miso_en.eq(1),
+            )
+        elif wires == 2:
+            fsm.act("END",
+                miso_en.eq(0),
+                NextValue(sync_byte, 0),
+                NextState("IDLE")
+            )

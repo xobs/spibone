@@ -112,7 +112,7 @@ class BaseSoC(SoCCore):
         "csr":      0x60000000,  # (default shadow @0xe0000000)
     }
 
-    def __init__(self, platform, three_wire, output_dir="build", **kwargs):
+    def __init__(self, platform, wires, output_dir="build", **kwargs):
         # Disable integrated RAM as we'll add it later
         self.integrated_sram_size = 0
 
@@ -131,7 +131,7 @@ class BaseSoC(SoCCore):
 
         # Add SPI
         spi_pads = platform.request("spi")
-        self.submodules.spibone = ClockDomainsRenamer("clk_48")(spibone.SpiWishboneBridge(spi_pads, three_wire=three_wire))
+        self.submodules.spibone = ClockDomainsRenamer("clk_48")(spibone.SpiWishboneBridge(spi_pads, wires=wires))
         self.add_wb_master(self.spibone.wishbone)
 
         class _WishboneBridge(Module):
@@ -192,9 +192,9 @@ def add_fsm_state_names():
         return My_LowerNext(self.next_state, self.next_state_name, self.encoding, self.state_aliases)
     fsm.FSM._lower_controls = my_lower_controls
 
-def generate(output_dir, csr_csv, three_wire):
+def generate(output_dir, csr_csv, wires=4):
     platform = Platform()
-    soc = BaseSoC(platform, three_wire,
+    soc = BaseSoC(platform, wires,
                             cpu_type=None, cpu_variant=None,
                             output_dir=output_dir)
     builder = Builder(soc, output_dir=output_dir,
@@ -212,12 +212,12 @@ def main():
     parser.add_argument('--csr', metavar='CSR',
                                  default='csr.csv',
                                  help='csr file (default: %(default)s)')
-    parser.add_argument('--three-wire', action="store_true",
-                                 help='enable three-wire SPI')
+    parser.add_argument('--wires', choices=[2, 3, 4], default=4, type=int,
+                                 help='select the number of wires for SPI')
     args = parser.parse_args()
     add_fsm_state_names()
     output_dir = args.dir
-    generate(output_dir, args.csr, args.three_wire)
+    generate(output_dir, args.csr, args.wires)
 
     print(
 """Simulation build complete.  Output files:
