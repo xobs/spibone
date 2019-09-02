@@ -108,6 +108,8 @@ class SpiWishboneBridge(Module):
                     NextValue(command, mosi),
                 ),
             )
+        else:
+            raise ValueError("invalid `wires` count: {}".format(wires))
 
         # Determine if it's a read or a write
         fsm.act("GET_TYPE_BYTE",
@@ -237,3 +239,5 @@ class SpiWishboneBridge(Module):
                 NextValue(sync_byte, 0),
                 NextState("IDLE")
             )
+        else:
+            raise ValueError("invalid `wires` count: {}".format(wires))
