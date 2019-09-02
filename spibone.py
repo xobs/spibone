@@ -47,14 +47,14 @@ class SpiWishboneBridge(Module):
             self.comb += io.o.eq(miso)
             self.comb += io.oe.eq(miso_en)
         elif wires == 3:
-            MultiReg(pads.cs_n, cs_n),
+            self.specials += MultiReg(pads.cs_n, cs_n),
             io = TSTriple()
             self.specials += io.get_tristate(pads.mosi)
             self.specials += MultiReg(io.i, mosi)
             self.comb += io.o.eq(miso)
             self.comb += io.oe.eq(miso_en)
         elif wires == 4:
-            MultiReg(pads.cs_n, cs_n),
+            self.specials += MultiReg(pads.cs_n, cs_n),
             self.specials += MultiReg(pads.mosi, mosi)
             if with_tristate:
                 self.specials += Tristate(pads.miso, miso, ~cs_n)
