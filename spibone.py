@@ -2,26 +2,134 @@ from migen import *
 from migen.fhdl.specials import Tristate, TSTriple
 from migen.genlib.cdc import MultiReg
 
+from litex.soc.integration.doc import ModuleDoc, AutoDoc
 from litex.soc.interconnect import wishbone, stream
 
+class Spi4WireDocumentation(ModuleDoc):
+    """4-Wire SPI Protocol
 
-class SpiWishboneBridge(Module):
-    """SPI Control (CPOL0 / CPHA0)
-    Read protocol:
-        Write: 01 | AA | AA | AA | AA
-        Read:  01 | VV | VV | VV | VV
-    Write protocol:
-        Write: 00 | AA | AA | AA | AA | VV | VV | VV | VV
-        Read:  00
-    "AA" is address, "VV" is value.  All bytes are big-endian.
-    During the "Read" phase, the host constantly outputs "FF"
-    until it has a response, at which point it outputs "00" (write)
-    or "01" (read).
+    The 4-wire SPI protocol does not require any pins to change direction, and
+    is therefore suitable for designs with level-shifters or without GPIOs that
+    can change direction.
+    
+    While waiting for the response, the ``MISO`` line remains high.  As soon as
+    a response is available, the device pulls the `MISO` line low and clocks
+    out either a ``0x00`` or `0x01` byte indicating whether it's a READ or a WRITE
+    that is being answered.  Note that if the operation is fast enough, the
+    device will not pull the `MISO` line high and will immediately respond
+    with ``0x00`` or ``0x01``.
+
+    You can abort the operation by driving ``CS`` high.  However, if a WRITE or
+    READ has already been initiated then it will not be aborted.
+
+    .. wavedrom::
+        :caption: 4-Wire SPI Operation
+
+        { "signal": [
+            ["Read",
+                {  "name": 'MOSI',        "wave": 'x23...x|xxxxxx', "data": '0x01 [ADDRESS]'},
+                {  "name": 'MISO',        "wave": 'x.....x|25...x', "data": '0x01 [DATA]'   },
+                {  "name": 'CS',          "wave": 'x0.....|.....x', "data": '1 2 3'},
+                {  "name": 'data bits',   "wave": 'xx2222x|x2222x', "data": '31:24 23:16 15:8 7:0 31:24 23:16 15:8 7:0'}
+            ],
+            {},
+            ["Write",
+                {  "name": 'MOSI',        "wave": 'x23...3...x|xx', "data": '0x00 [ADDRESS] [DATA]'},
+                {  "name": 'MISO',        "wave": 'x.........1|2x', "data": '0x00'   },
+                {  "name": 'CS',          "wave": 'x0.........|.x', "data": '1 2 3'},
+                {  "name": 'data bits',   "wave": 'xx22222222x|xx', "data": '31:24 23:16 15:8 7:0 31:24 23:16 15:8 7:0'}
+            ]
+        ]}
+    """
+
+class Spi3WireDocumentation(ModuleDoc):
+    """3-Wire SPI Protocol
+
+    The 3-wire SPI protocol repurposes the ``MOSI`` line for both data input and
+    data output.  The direction of the line changes immediately after the
+    address (for read) or the data (for write) and the device starts writing
+    ``0xFF``.
+
+    As soon as data is available (read) or the data has been written (write),
+    the device drives the ``MOSI`` line low in order to clock out ``0x00``
+    or ``0x01``.  This will always happen on a byte boundary.
+
+    You can abort the operation by driving ``CS`` high.  However, if a WRITE or
+    READ has already been initiated then it will not be aborted.
+
+    .. wavedrom::
+        :caption: 3-Wire SPI Operation
+
+        { "signal": [
+            ["Read",
+                {  "name": 'MOSI',        "wave": 'x23...5|55...x', "data": '0x01 [ADDRESS] 0xFF 0x01 [DATA]'},
+                {  "name": 'CS',          "wave": 'x0.....|.....x', "data": '1 2 3'},
+                {  "name": 'data bits',   "wave": 'xx2222x|x2222x', "data": '31:24 23:16 15:8 7:0 31:24 23:16 15:8 7:0'}
+            ],
+            {},
+            ["Write",
+                {  "name": 'MOSI',        "wave": 'x23...3...5|50', "data": '0x00 [ADDRESS] [DATA] 0xFF 0x00'},
+                {  "name": 'CS',          "wave": 'x0.........|.x', "data": '1 2 3'},
+                {  "name": 'data bits',   "wave": 'xx22222222x|xx', "data": '31:24 23:16 15:8 7:0 31:24 23:16 15:8 7:0'}
+            ]
+        ]}
+        """
+
+class Spi2WireDocumentation(ModuleDoc):
+    """2-Wire SPI Protocol
+
+    The 2-wire SPI protocol removes the ``CS`` line in favor of a sync byte.
+    Note that the 2-wire protocol has no way of interrupting communication,
+    so if the bus locks up the device must be reset.  The direction of the
+    data line changes immediately after the address (for read) or the data
+    (for write) and the device starts writing ``0xFF``.
+
+    As soon as data is available (read) or the data has been written (write),
+    the device drives the ``MOSI`` line low in order to clock out ``0x00``
+    or ``0x01``.  This will always happen on a byte boundary.
+
+    All transactions begin with a sync byte of ``0xAB``.
+
+    .. wavedrom::
+        :caption: 2-Wire SPI Operation
+
+        { "signal": [
+            ["Write",
+                {  "name": 'MOSI',        "wave": '223...5|55...', "data": '0xAB 0x01 [ADDRESS] 0xFF 0x01 [DATA]'},
+                {  "name": 'data bits',   "wave": 'xx2222x|x2222', "data": '31:24 23:16 15:8 7:0 31:24 23:16 15:8 7:0'}
+            ],
+            {},
+            ["Read",
+                {  "name": 'MOSI',        "wave": '223...3...5|5', "data": '0xAB 0x00 [ADDRESS] [DATA] 0xFF 0x00'},
+                {  "name": 'data bits',   "wave": 'xx22222222x|x', "data": '31:24 23:16 15:8 7:0 31:24 23:16 15:8 7:0'}
+            ]
+        ]}
+        """
+
+class SpiWishboneBridge(Module, ModuleDoc, AutoDoc):
+    """Wishbone Bridge over SPI
+
+    This module allows for accessing a Wishbone bridge over a {}-wire protocol.
+    All operations occur on byte boundaries, and are big-endian.
+
+    The device can take a variable amount of time to respond, so the host should
+    continue polling after the operation begins.  If the Wishbone bus is
+    particularly busy, such as during periods of heavy processing when the
+    CPU's icache is empty, responses can take many thousands of cycles.
+
+    The bridge core is designed to run at 1/4 the system clock.
     """
     def __init__(self, pads, wires=4, with_tristate=True):
         self.wishbone = wishbone.Interface()
 
         # # #
+        self.__doc__ = self.__doc__.format(wires)
+        if wires == 4:
+            self.mod_doc = Spi4WireDocumentation()
+        elif wires == 3:
+            self.mod_doc = Spi3WireDocumentation()
+        elif wires == 2:
+            self.mod_doc = Spi2WireDocumentation()
 
         clk = Signal()
         cs_n = Signal()
